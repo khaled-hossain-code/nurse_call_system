@@ -1,27 +1,39 @@
 ///******* Modules ******************\\\
 var b = require('bonescript');
 
-
+var wardLightInterval; //it is a setInterval function
+var presenceIndicationInterval; //this one is also a setInterval Function
 // *********** Variables *************\\
-var colors = ['red','green','blue','yellow','pink','cyan','white','off'];
-var state = b.LOW;
+var heartState = b.LOW;
+var wardColorState = 'off';
+var presenceColorState = 'off';
+var state = {
+    value: 100, //initially not in any state. states will be defined when pendant is pressed
+    description: "no call",
+}; // this system can be in one of the following state 0.No Call 1.Patient Called 2.Emergency 3.BlueCode
 var heartbitRate = 1000;
-var nurseCalled = 1;
-
-
+var presencePressed = 0;
+var duration = 100;
+var flickerTime = 1000;
 ///********* pin Assigning ***********\\\
 var heartbit = 'USR0';
 var userLed1 = 'USR1';
 var userLed2 = 'USR2';
 var userLed3 = 'USR3';
+
 //rgb led pin assign for ward light
-var ledRed  = "P9_18"; //10ohm resistor is connected
-var ledBlue = "P9_22"; // 10ohm resistor is connected
-var ledGreen = "P9_17"; // 10ohm resistor is connected
+var wardLightRed  = "P9_18"; //10ohm resistor is connected
+var wardLightBlue = "P9_26"; // 10ohm resistor is connected
+var wardLightGreen = "P9_22"; // 10ohm resistor is connected
+
+var presenceIndicationRed = "P8_7";
+var presenceIndicationGreen =  "P8_9";
+var callIndicationSound = "P8_15";
+
 //wardLight Inputs
 var pendant_button = "P9_12"; // pendant is the input of patient to call the nurse , this pin is pulled low externally by a 7.5k ohm res
 var presence_button = "P9_14"; //presence button is the input of nurse presence, this pin is pulled low externally by a 7.5k ohm res
-
+var cancel_button = "P9_16";
 
 /// ******** pinMode setup ***********\\
 // setting outputs of onboard LED
@@ -29,13 +41,21 @@ b.pinMode(heartbit,b.OUTPUT); // declearing user led 0 as output
 b.pinMode(userLed1,b.OUTPUT);
 b.pinMode(userLed2,b.OUTPUT);
 b.pinMode(userLed3,b.OUTPUT);
+
 // setting outputs of wardlight LED
-b.pinMode(ledRed,  b.OUTPUT);
-b.pinMode(ledBlue, b.OUTPUT);
-b.pinMode(ledGreen, b.OUTPUT);
+b.pinMode(wardLightRed,  b.OUTPUT);
+b.pinMode(wardLightBlue, b.OUTPUT);
+b.pinMode(wardLightGreen, b.OUTPUT);
+
+// setting outputs of Patient Call Point light LED
+b.pinMode(presenceIndicationGreen,  b.OUTPUT);
+b.pinMode(presenceIndicationRed, b.OUTPUT);
+b.pinMode(callIndicationSound, b.OUTPUT);
+
 //setting inputs
 b.pinMode(pendant_button,b.INPUT); // this input only accepts high input
 b.pinMode(presence_button,b.INPUT); // this input only accepts high input
+b.pinMode(cancel_button,b.INPUT); // this input only accepts high input
 
 
 
@@ -45,7 +65,7 @@ b.pinMode(presence_button,b.INPUT); // this input only accepts high input
 
 ///*****************function call once************************ \\\
 wardLight('off'); // At begining ward light is off
-
+presenceIndication('off'); // At begining patient call point indication is off
 
 ///*****************function loop************************ \\\ 
 setInterval(hearRate, heartbitRate); //Checking the Heartbit
@@ -53,27 +73,78 @@ console.log('HeartBit started');
 b.attachInterrupt(pendant_button, true, b.RISING, callNurse);//input of pendant is interrupt driven, RISING, FALLING, CHANGE, whenever from low pin goes to high it calls callNurse function.
 console.log("Ready to take input");
 b.attachInterrupt(presence_button, true, b.RISING, nursePresence);//input of nurse presence is interrupt driven, RISING, FALLING, CHANGE, whenever from low pin goes to high it calls nursePresence function.
-
+b.attachInterrupt(cancel_button, true, b.RISING, cancelCall); // cancels emergency or bluecode call
 
 
 /// ***************function Definition**********************\\\
 
-//this function get called when nurse presence button is pressed
-//tasks:1.turn off ward light, 2.send the presence signal to server
-// input: object with interrupt information, x is the object here
-// output: none
-function nursePresence(x){
-    // console.log(JSON.stringify(x)); 
-    // x is {"pin":{"name":"GPIO1_28","gpio":60,"mux":"gpmc_ben1","eeprom":36,"key":"P9_12","muxRegOffset":"0x078","options":["gpmc_ben1","mii2_col","NA","mmc2_dat3","NA","NA","mcasp0_aclkr","gpio1_28"]},"attached":true}
-    if(x.value === 1)
-    {
-        //tasks:1.turn off ward light 
-        wardLight('off');
-        console.log('Nurse has arrived');
-        //task2 send notification to server 
-    }
+
+//this is the main operation handling function
+function executeState()
+{
+    
+    switch (state.value)
+        {
+            case 0: //PRESENCE:this state is present state. when nurse press the presence button 
+                wardLight('off');
+                presenceIndication('off');
+                soundIndication(duration);// task 3 need to generate sound as a confirmation of presence button presses
+                //task3 notify server
+                state.description = "Nurse pressed the presence button";
+                break;
+                
+            case 1: //NORMAL CALL: whenever patient presses pendant. state.value = 1 & this means normal call
+                wardLight('green'); //task 1 is completed green light is turned on
+                presenceIndication('green'); // task 2 to turn on patient presence button as green
+                soundIndication(duration);// task 3 need to generate sound as a confirmation of button pressed
+                // task 4 need to be done notify server
+                state.description = "Patient Called Nurse for help";
+                break;
+                
+            case 2: //EMERGENCY:whenever nurse presses presence button twice while it was on off state this case is executed. state.value =2
+                wardLight('red'); //tasks:1.turn off ward light
+                presenceIndication('red'); //task2: turn off nurse presence indication
+                state.description = "Nurse called for emergency help";
+                soundIndication(duration);
+                setTimeout(function(){
+                    soundIndication(duration);    
+                },2*duration);
+                break;
+                
+            case 3: //BLUECODE:whenever nurse presses presence button once while it was on emergency state this case is executed. state.value =3
+                wardLightInterval = setInterval(wardLightFlicker,flickerTime); //tasks:1.turn on ward light flickering
+                presenceIndicationInterval = setInterval(presenceIndicationFlicker,flickerTime); //task2: turn on nurse presence indication flickering
+                soundIndication(duration);
+                setTimeout(function(){
+                    soundIndication(duration);    
+                },2*duration);
+                state.description = "Nurse called for BlueCode";
+                break;
+                
+            case 4: //cancel emergency call
+                wardLight('off'); //tasks:1.turn off ward light 
+                presenceIndication('off'); //task2: turn off nurse presence indication 
+                state.description = "Cancelled Emergency call";// task3 set the description
+                //task4: tell the server
+                break;
+                
+            case 5: //cancel bluecode alert
+                clearInterval(wardLightInterval); //tasks:1.turn off ward light 
+                wardLight('off');
+                clearInterval(presenceIndicationInterval) //task2: turn off nurse presence indication 
+                presenceIndication('off');
+                //task3 set the description
+                state.description = "Cancelled BlueCode call";
+                //task4 notify the server
+                break;
+            default:
+                console.log("Unknown Case ");
+        }
+        
+        console.log(state.description);
 }
 
+/////////Button Pressed Events\\\\\\\\\\\\\\\\\\\\\
 
 //this function get called when pendant is pressed, 
 // tasks: 1. turn on green ward light,2.sound notification of button press for visible disabled people 3.notify server that pendant is pressed
@@ -86,26 +157,160 @@ function callNurse(x)
     
      if(x.value === 1) // x.value gives the value of pin. is it high or low
      {
-        wardLight('green'); //task 1 is completed green light is turned on
-        // task 2 need to generate sound as a confirmation of button pressed
-        // task 3 need to be done notify server
-        console.log("Nurse Called " + nurseCalled); // display confirmation & number of patient call
-        nurseCalled++;   //increamenting the count after each time press
+        //patient can call the nurse only if the system state is at presence or state 0/ cancel of emergency or state 4 / cancel of bluecode or state 5
+        if(state.value === 0 || state.value === 4 || state.value === 5)
+        {
+            state.value = 1; //state 1 means normal call 
+            presencePressed = 0; // clearing all unnecessary presence button called by any children 
+            executeState();
+        }else
+        {
+            soundIndication(duration);
+            console.log("Already Called Nurse Once");
+        }
      }
 }
 
+
+
+//this function get called when nurse presence button is pressed
+//tasks:1.turn off ward light, 2.send the presence signal to server
+// input: object with interrupt information, x is the object here
+// output: none
+function nursePresence(y){
+    // console.log(JSON.stringify(x)); 
+    // y is {"pin":{"name":"GPIO1_28","gpio":60,"mux":"gpmc_ben1","eeprom":36,"key":"P9_12","muxRegOffset":"0x078","options":["gpmc_ben1","mii2_col","NA","mmc2_dat3","NA","NA","mcasp0_aclkr","gpio1_28"]},"attached":true}
+    
+    if(y.value === 1) // if this condition is not used then at initialization nursePresence runs automatically once
+    {
+        presencePressed++;
+        console.log("Presence Pressed total: " + presencePressed);
+        
+        if(presencePressed === 1 && state.value === 1) // means patient has already pressed the pendant and nurse just pressed the presence button once
+        {
+            state.value = 0; // nurse is present
+            presencePressed = 0; //resetting the presencePressed value and ready to take input from pendant again
+            console.log("Nurse Pressed the presence Button");
+            executeState();
+        }
+        else if(presencePressed === 2 && state.value === 0) // means presence button is pressed twice and the system is in presence state. 
+        {
+            state.value = 2; // this means emergency state
+            executeState();
+        }
+        else if(presencePressed === 3 && state.value === 0) // means presence button is pressed thrice or more than thrice 
+        {
+            state.value = 3; // this means bluecode state
+            executeState();
+        }
+        else if(presencePressed > 3)
+        {
+            //soundIndication(duration);
+            console.log("Already Generated BlueCode");
+        }
+    }
+}
+
+
+
+//this function get called when cancel is pressed, 
+// tasks: 1. turn off ward light,2.turn off patience call point light 3.notify server that call is canceled 
+// input: object with interrupt information, x is the object here
+// output: none
+function cancelCall(z)
+{
+    // console.log(JSON.stringify(x)); 
+    // x is {"pin":{"name":"GPIO1_28","gpio":60,"mux":"gpmc_ben1","eeprom":36,"key":"P9_12","muxRegOffset":"0x078","options":["gpmc_ben1","mii2_col","NA","mmc2_dat3","NA","NA","mcasp0_aclkr","gpio1_28"]},"attached":true}
+    
+     if(z.value === 1) // x.value gives the value of pin. is it high or low
+     {
+         presencePressed = 0; //clearing number of time nurse pressed the present button
+         
+         if(state.value === 2) // if nurse has called for emergency then cancel the emergency call alert
+         {
+            state.value = 4;  //state 4 means cancel emergency call
+            executeState();     
+         }else if(state.value === 3) // if nurse has called for bluecode then cancel the blue code alert
+         { 
+             state.value = 5;
+             executeState();
+         }
+         else{
+             console.log("nothing to cancel");
+         }
+        
+     }
+}
 // this is a function to turn on & off User led 0. To indicate that device is Alive
 // inputs: none
 // outputs: none
 // used: used as a callback function with a interval of 1000ms 
 function hearRate()  
 {
-    if (state == b.LOW) state = b.HIGH; //toggling heartbit
-    else state = b.LOW;
+    if (heartState == b.LOW) heartState = b.HIGH; //toggling heartbit
+    else heartState = b.LOW;
         
-    b.digitalWrite(heartbit, state); // here state can be 0 / 1.
+    b.digitalWrite(heartbit, heartState); // here state can be 0 / 1.
 }
 // end of heartRate function
+
+
+//wardlight Flicker
+function wardLightFlicker()  
+{
+    if (wardColorState === 'off') wardColorState = 'red' ; //toggling wardLight
+    else wardColorState = 'off';
+        
+        wardLight(wardColorState);
+     // here state can be off / red.
+}
+
+//PatientPresencelight Flicker
+function presenceIndicationFlicker() 
+{
+    if (presenceColorState === 'off') presenceColorState = 'red' ; //toggling wardLight
+    else presenceColorState = 'off';
+        
+        presenceIndication(presenceColorState);
+     // here state can be off / red.
+}
+
+//Presencelight Flicker
+////////// SERVICES \\\\\\\\\\\\\\\\\\\
+
+//this is a function to generate beep
+//Description:- Whenever patient calls nurse its a sound indication to confirm that the call is happend. or any kind of error also generate sound
+//inputs:- delay in milliseconds (the duration of how long the sound will be)
+//outputs:- none
+function soundIndication(milliseconds){
+    b.digitalWrite(callIndicationSound, b.HIGH);
+    console.log("milliseconds : " + milliseconds);
+    setTimeout(function() {
+        b.digitalWrite(callIndicationSound, b.LOW);
+    }, milliseconds);
+}
+
+//This is a function to turn on ward light. 
+// Description:- this function takes color name as input and turn on the respective pins to turn on that color
+// inputs :- 'red', 'green', 'blue', 'yellow', 'pink', 'white', default no color
+// outputs:- none
+function presenceIndication(color){
+    
+        switch (color) {
+            case 'red': // red color
+            b.digitalWrite(presenceIndicationRed,  b.HIGH);
+            b.digitalWrite(presenceIndicationGreen, b.LOW);
+            break;
+            case 'green': // green color
+            b.digitalWrite(presenceIndicationRed,  b.LOW);
+            b.digitalWrite(presenceIndicationGreen, b.HIGH);
+            break;
+            default:
+            b.digitalWrite(presenceIndicationRed,  b.LOW);
+            b.digitalWrite(presenceIndicationGreen, b.LOW);
+        }
+       // console.log("presence Indication: " + color);
+}
 
 //This is a function to turn on ward light. 
 // Description:- this function takes color name as input and turn on the respective pins to turn on that color
@@ -115,45 +320,46 @@ function wardLight(color){
     
     switch (color) {
         case 'red': // red color
-        b.digitalWrite(ledRed,  b.HIGH);
-        b.digitalWrite(ledBlue, b.LOW);
-        b.digitalWrite(ledGreen, b.LOW);
+        b.digitalWrite(wardLightRed,  b.HIGH);
+        b.digitalWrite(wardLightBlue, b.LOW);
+        b.digitalWrite(wardLightGreen, b.LOW);
         break;
         case 'green': // green color
-        b.digitalWrite(ledRed,  b.LOW);
-        b.digitalWrite(ledBlue, b.LOW);
-        b.digitalWrite(ledGreen, b.HIGH);
+        b.digitalWrite(wardLightRed,  b.LOW);
+        b.digitalWrite(wardLightBlue, b.LOW);
+        b.digitalWrite(wardLightGreen, b.HIGH);
         break;
         case 'blue': // blue color
-        b.digitalWrite(ledRed,  b.LOW);
-        b.digitalWrite(ledBlue, b.HIGH);
-        b.digitalWrite(ledGreen, b.LOW);
+        b.digitalWrite(wardLightRed,  b.LOW);
+        b.digitalWrite(wardLightBlue, b.HIGH);
+        b.digitalWrite(wardLightGreen, b.LOW);
         break;
         case 'pink': // pink color
-        b.digitalWrite(ledRed,  b.HIGH);
-        b.digitalWrite(ledBlue, b.HIGH);
-        b.digitalWrite(ledGreen, b.LOW);
+        b.digitalWrite(wardLightRed,  b.HIGH);
+        b.digitalWrite(wardLightBlue, b.HIGH);
+        b.digitalWrite(wardLightGreen, b.LOW);
         break;
         case 'cyan': // cyan color
-        b.digitalWrite(ledRed,  b.LOW);
-        b.digitalWrite(ledBlue, b.HIGH);
-        b.digitalWrite(ledGreen, b.HIGH);
+        b.digitalWrite(wardLightRed,  b.LOW);
+        b.digitalWrite(wardLightBlue, b.HIGH);
+        b.digitalWrite(wardLightGreen, b.HIGH);
         break;
         case 'yellow': // yellow color
-        b.digitalWrite(ledRed,  b.HIGH);
-        b.digitalWrite(ledBlue, b.LOW);
-        b.digitalWrite(ledGreen, b.HIGH);
+        b.digitalWrite(wardLightRed,  b.HIGH);
+        b.digitalWrite(wardLightBlue, b.LOW);
+        b.digitalWrite(wardLightGreen, b.HIGH);
         break;
         case 'white': // yellow color
-        b.digitalWrite(ledRed,  b.HIGH);
-        b.digitalWrite(ledBlue, b.HIGH);
-        b.digitalWrite(ledGreen, b.HIGH);
+        b.digitalWrite(wardLightRed,  b.HIGH);
+        b.digitalWrite(wardLightBlue, b.HIGH);
+        b.digitalWrite(wardLightGreen, b.HIGH);
         break;
         default:
-        b.digitalWrite(ledRed,  b.LOW);
-        b.digitalWrite(ledBlue, b.LOW);
-        b.digitalWrite(ledGreen, b.LOW);
+        b.digitalWrite(wardLightRed,  b.LOW);
+        b.digitalWrite(wardLightBlue, b.LOW);
+        b.digitalWrite(wardLightGreen, b.LOW);
     }
-    console.log(color);
+    // console.log("ward light:" + color);
         
 }
+
