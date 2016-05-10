@@ -8,7 +8,7 @@ var heartState = b.LOW;
 var wardColorState = 'off';
 var presenceColorState = 'off';
 var state = {
-    value: 100, //initially not in any state. states will be defined when pendant is pressed
+    value: 4, //initially at cancel state, so that presence button does not work but pendant button works
     description: "no call",
 }; // this system can be in one of the following state 0.No Call 1.Patient Called 2.Emergency 3.BlueCode
 var heartbitRate = 1000;
@@ -198,7 +198,7 @@ function nursePresence(y){
             state.value = 2; // this means emergency state
             executeState();
         }
-        else if(presencePressed === 3 && state.value === 0) // means presence button is pressed thrice or more than thrice 
+        else if(presencePressed === 3 && state.value === 2) // means presence button is pressed thrice or more than thrice 
         {
             state.value = 3; // this means bluecode state
             executeState();
