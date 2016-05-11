@@ -11,9 +11,11 @@ var state = {
     value: 4, //initially at cancel state, so that presence button does not work but pendant button works
     description: "no call",
 }; // this system can be in one of the following state 0.No Call 1.Patient Called 2.Emergency 3.BlueCode
+var buzzerDutyCycle = 0.5;
+var buzzerFreq = 2000;
 var heartbitRate = 1000;
 var presencePressed = 0;
-var duration = 100;
+var duration = 100; // buzzer duration
 var flickerTime = 1000;
 ///********* pin Assigning ***********\\\
 var heartbit = 'USR0';
@@ -28,12 +30,13 @@ var wardLightGreen = "P9_22"; // 10ohm resistor is connected
 
 var presenceIndicationRed = "P8_7";
 var presenceIndicationGreen =  "P8_9";
-var callIndicationSound = "P8_15";
+var callIndicationSound = "P8_19"; //buzzer
 
 //wardLight Inputs
 var pendant_button = "P9_12"; // pendant is the input of patient to call the nurse , this pin is pulled low externally by a 7.5k ohm res
 var presence_button = "P9_14"; //presence button is the input of nurse presence, this pin is pulled low externally by a 7.5k ohm res
 var cancel_button = "P9_16";
+
 
 /// ******** pinMode setup ***********\\
 // setting outputs of onboard LED
@@ -50,7 +53,6 @@ b.pinMode(wardLightGreen, b.OUTPUT);
 // setting outputs of Patient Call Point light LED
 b.pinMode(presenceIndicationGreen,  b.OUTPUT);
 b.pinMode(presenceIndicationRed, b.OUTPUT);
-b.pinMode(callIndicationSound, b.OUTPUT);
 
 //setting inputs
 b.pinMode(pendant_button,b.INPUT); // this input only accepts high input
@@ -75,8 +77,8 @@ console.log("Ready to take input");
 b.attachInterrupt(presence_button, true, b.RISING, nursePresence);//input of nurse presence is interrupt driven, RISING, FALLING, CHANGE, whenever from low pin goes to high it calls nursePresence function.
 b.attachInterrupt(cancel_button, true, b.RISING, cancelCall); // cancels emergency or bluecode call
 
-
 /// ***************function Definition**********************\\\
+
 
 
 //this is the main operation handling function
@@ -170,7 +172,6 @@ function callNurse(x)
         }
      }
 }
-
 
 
 //this function get called when nurse presence button is pressed
@@ -280,11 +281,13 @@ function presenceIndicationFlicker()
 //Description:- Whenever patient calls nurse its a sound indication to confirm that the call is happend. or any kind of error also generate sound
 //inputs:- delay in milliseconds (the duration of how long the sound will be)
 //outputs:- none
-function soundIndication(milliseconds){ //TODO buzzer by pwm
-    b.digitalWrite(callIndicationSound, b.HIGH);
-    console.log("milliseconds : " + milliseconds);
+function soundIndication(milliseconds){ 
+    
+    b.analogWrite(callIndicationSound, buzzerDutyCycle, buzzerFreq);
+    if(milliseconds === 'undefined') milliseconds = 100;
+    
     setTimeout(function() {
-        b.digitalWrite(callIndicationSound, b.LOW);
+        b.analogWrite(callIndicationSound, 0);     // Turn off buzzer after milliseconds time 
     }, milliseconds);
 }
 
