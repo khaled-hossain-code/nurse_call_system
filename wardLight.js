@@ -211,8 +211,6 @@ function nursePresence(y){
     }
 }
 
-
-
 //this function get called when cancel is pressed, 
 // tasks: 1. turn off ward light,2.turn off patience call point light 3.notify server that call is canceled 
 // input: object with interrupt information, x is the object here
@@ -282,7 +280,7 @@ function presenceIndicationFlicker()
 //Description:- Whenever patient calls nurse its a sound indication to confirm that the call is happend. or any kind of error also generate sound
 //inputs:- delay in milliseconds (the duration of how long the sound will be)
 //outputs:- none
-function soundIndication(milliseconds){
+function soundIndication(milliseconds){ //TODO buzzer by pwm
     b.digitalWrite(callIndicationSound, b.HIGH);
     console.log("milliseconds : " + milliseconds);
     setTimeout(function() {
