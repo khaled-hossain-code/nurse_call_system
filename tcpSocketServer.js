@@ -14,9 +14,9 @@ var server = net.createServer(function (socket) {
 server.on('connection', function (server_socket) {
     console.log('client connected');
     server_socket.write('hello client! Say something.');
-    //server_socket.pipe(server_socket);
+    server_socket.pipe(server_socket);
     
-    process.stdin.pipe(server_socket);
+    //process.stdin.pipe(server_socket); //this is for chatting
     
     server_socket.on('data', function (chunk) {
         console.log('BeagleBone: ' + chunk);
