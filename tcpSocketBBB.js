@@ -3,7 +3,7 @@ var HOST = '192.168.1.6'; //server address to which beaglebone will be connected
 var PORT = 6969; //server port address
 
 var client_socket = net.connect({port:PORT, host:HOST});
-var BBB = client_socket.address();
+var BBB;
 /*BBB = {
     address: '192.168.1.240',
     family: 'IPv4',
@@ -15,6 +15,7 @@ var BBB = client_socket.address();
 client_socket.on('connect', function() {
     console.log('connected to server!');
     console.log("Server => "+HOST+":"+PORT);
+    BBB = client_socket.address();
     console.log("Client => "+BBB.address+":"+BBB.port);
 });
 
