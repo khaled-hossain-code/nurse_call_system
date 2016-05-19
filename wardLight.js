@@ -37,7 +37,6 @@ var pendant_button = "P9_12"; // pendant is the input of patient to call the nur
 var presence_button = "P9_14"; //presence button is the input of nurse presence, this pin is pulled low externally by a 7.5k ohm res
 var cancel_button = "P9_16";
 
-
 /// ******** pinMode setup ***********\\
 // setting outputs of onboard LED
 b.pinMode(heartbit,b.OUTPUT); // declearing user led 0 as output
@@ -191,7 +190,7 @@ function nursePresence(y){
         {
             state.value = 0; // nurse is present
             presencePressed = 0; //resetting the presencePressed value and ready to take input from pendant again
-            console.log("Nurse Pressed the presence Button");
+            //console.log("Nurse Pressed the presence Button");
             executeState();
         }
         else if(presencePressed === 2 && state.value === 0) // means presence button is pressed twice and the system is in presence state. 
