@@ -8,6 +8,6 @@ b.pinMode(callIndicationSound,  b.ANALOG_OUTPUT);
 b.analogWrite(callIndicationSound, buzzerDutyCycle, buzzerFreq);
 
 setTimeout(function() {
-        console.log("inside setTimeout block");
+        console.log("inside setTimeout block ");
         b.analogWrite(callIndicationSound, 0);     // Turn off buzzer after milliseconds time 
     }, 2000);
